@@ -1,0 +1,44 @@
+# ── Dependencies ──────────────────────────────────────────────────────────────
+node_modules/
+.pnp
+.pnp.js
+
+# ── Next.js build output ──────────────────────────────────────────────────────
+.next/
+out/
+build/
+
+# ── Prisma ────────────────────────────────────────────────────────────────────
+# Local SQLite dev database — never commit this; each dev runs `prisma db push`
+prisma/dev.db
+prisma/dev.db-journal
+prisma/*.db
+
+# ── Environment variables ─────────────────────────────────────────────────────
+# Copy .env.example and fill in your own values
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# ── Editor & OS ───────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+
+# ── TypeScript ────────────────────────────────────────────────────────────────
+*.tsbuildinfo
+next-env.d.ts
+
+# ── Logs ─────────────────────────────────────────────────────────────────────
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
