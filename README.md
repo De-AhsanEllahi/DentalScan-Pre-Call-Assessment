@@ -1,8 +1,40 @@
 # DentalScan AI — Full-Stack Engineering Challenge
 
-> A patient-facing dental imaging web application built with **Next.js 14**, **TypeScript**, **Prisma ORM**, and **SQLite**. Patients complete a guided multi-angle tooth scan, clinics are notified instantly, and both parties can communicate through a real-time messaging sidebar — no extra apps required.
+## Overview
+
+This repository is my submission for the **DentalScan AI Pre-Call Full-Stack Engineering Challenge**. The goal was to take a provided starter kit — a bare Next.js 14 app with a Prisma schema and a partially scaffolded component — and build three production-ready features end-to-end within a tight scope.
+
+DentalScan AI is a patient-facing dental imaging platform. Patients photograph their teeth from multiple angles using their phone camera; those images are then reviewed by dentists who can communicate back through the platform. The challenge simulates the core technical loop of that product: **capture → notify → communicate**.
 
 ---
+
+## What Was Built
+
+### 🦷 Task 1 — Guided Dental Scan Flow
+Enhanced `ScanningFlow.tsx` with a complete guided capture experience:
+- A **responsive circular overlay** that helps patients frame their mouth correctly, with a dark vignette mask to focus attention
+- A **real-time stability indicator** (red → amber → green) driven by `DeviceMotionEvent` — the border and label colour change as the device steadies, gating the capture button until the shot is clean
+- **5-step sequential capture** (Front, Left, Right, Upper, Lower) with per-step instructions and a thumbnail progress strip
+- **Camera error handling** with user-facing messages for denied or unavailable cameras
+- Performance-optimised motion detection: raw events write to a ref (zero re-renders), a 200ms polling interval updates state only when the stability category changes
+
+### 🔔 Task 2 — Scan Completion Notification System
+Built the full backend notification pipeline on `POST /api/notify`:
+- Fires automatically when all 5 scans complete, **without blocking** the patient's UI
+- Persists a `Notification` record to the database with `read: false` for clinic consumption
+- Simulates SMS dispatch via a **Twilio stub** (ready to wire up with real credentials)
+- Bonus `GET /api/notify` endpoint for a future clinic dashboard to poll unread alerts
+
+### 💬 Task 3 — Patient-Dentist Messaging Sidebar
+Full-stack messaging feature built from scratch:
+- Slide-in **MessageSidebar** component on the results page — opens via a floating icon, closes via an X button or clicking outside
+- **Thread auto-creation** on the first message — no manual setup needed
+- **Optimistic UI**: messages appear instantly at 50% opacity, replaced by the real DB record on success, or rolled back with the input restored on failure
+- Inline error state (no `alert()`), ARIA roles for accessibility, and the company brand colour `#61a5fa` applied consistently across the UI
+- Backend: `POST /api/messaging` creates threads and persists messages; `GET /api/messaging` fetches a thread's history
+
+---
+
 
 ## Table of Contents
 
