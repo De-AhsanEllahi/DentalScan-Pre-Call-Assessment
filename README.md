@@ -18,6 +18,7 @@
 - [Architecture Decisions](#architecture-decisions)
 - [Error Handling](#error-handling)
 - [Code Quality](#code-quality)
+- [If I Had More Time](#if-i-had-more-time)
 
 ---
 
@@ -406,3 +407,62 @@ return NextResponse.json({ ok: true }); // returns instantly
 - Message sidebar has `role="dialog"`, `aria-modal="true"`, `aria-label`
 - All icon-only buttons have `aria-label`
 - Input field labelled with `aria-label="Message input"`
+
+---
+
+## If I Had More Time
+
+This section outlines the features, optimisations, and architectural improvements I would tackle given more time — roughly in priority order.
+
+### 🔐 Authentication & Multi-Tenancy
+- Integrate **NextAuth.js** (or Clerk) for proper patient and dentist authentication
+- Replace the hardcoded `patientId: "patient_001"` and `userId: "clinic_default"` with real session-derived identities
+- Scope all DB queries by authenticated user — patients only see their own threads; dentists only see threads for their clinic
+
+### 📡 Real-Time Messaging
+- Replace the current poll-on-open fetch with **WebSockets or Server-Sent Events** so new clinic replies appear in the sidebar without a refresh
+- Likely implementation: Next.js Route Handlers with SSE, or a lightweight Pusher / Ably integration
+- Add typing indicators and read receipts
+
+### 📲 Real SMS Notifications
+- Wire up the **Twilio** stub in `POST /api/notify` with actual credentials from environment variables
+- Send an SMS to the clinic's phone number the moment a scan is uploaded
+- Add a webhook handler for Twilio delivery status callbacks to track whether the SMS was delivered
+
+### 🗄️ Production Database
+- Migrate from SQLite to **PostgreSQL** (via Supabase, Neon, or PlanetScale)
+- Update `schema.prisma` to use `provider = "postgresql"` and replace the CSV `images` field with a proper `String[]` array or a `ScanImage` relation table
+- Add database connection pooling (PgBouncer or Prisma Accelerate) for serverless environments
+
+### 📷 Actual Image Upload
+- The captured canvas frames are currently held in component state as base64 data URLs — they are never persisted
+- Add a `POST /api/upload` route that accepts the images, stores them in **AWS S3 / Cloudflare R2**, and writes the URLs back to the `Scan.images` column
+- Show the uploaded image URLs on the results page rather than a static placeholder
+
+### 🦷 AI Scan Analysis
+- Integrate an image classification model (e.g. via **Replicate API** or a custom TensorFlow.js model) to analyse the uploaded dental images
+- Display findings on the results page: cavity risk, plaque detection, alignment notes
+- Stream results progressively so the patient sees feedback as each image is processed
+
+### 🔔 Clinic Notification Dashboard
+- Build a `/dashboard` page for dentists that consumes `GET /api/notify`
+- Display unread notifications with scan ID, timestamp, and a "Mark as read" action that calls a `PATCH /api/notify/:id` endpoint
+- Add a badge counter on the clinic-side nav showing unread count
+
+### ⚡ Performance
+- Add `React.memo` to the thumbnail strip items to prevent unnecessary re-renders during capture
+- Lazy-load `MessageSidebar` with `next/dynamic` since it's not needed until the user interacts
+- Implement image compression before upload (use `canvas.toDataURL("image/jpeg", 0.8)` quality parameter and resize to a max dimension)
+- Add `loading="lazy"` to thumbnail `<img>` tags
+
+### 🧪 Testing
+- Unit tests for `STABILITY_CONFIG` threshold logic and the motion magnitude calculation
+- Integration tests for all API routes using **Vitest** + `msw` (Mock Service Worker)
+- End-to-end tests with **Playwright** covering the full scan → notify → message flow
+- Test the optimistic UI rollback path explicitly
+
+### 📱 Mobile UX Polish
+- Request `{ facingMode: "environment" }` (rear camera) for tooth scans instead of the selfie camera — rear cameras have higher resolution and better macro focus
+- Add haptic feedback (`navigator.vibrate`) on successful capture
+- Lock screen orientation to portrait during the scan flow
+- Add a countdown timer (3-2-1) before auto-capturing when stability is detected, reducing the need to tap the button
