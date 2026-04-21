@@ -498,3 +498,13 @@ This section outlines the features, optimisations, and architectural improvement
 - Add haptic feedback (`navigator.vibrate`) on successful capture
 - Lock screen orientation to portrait during the scan flow
 - Add a countdown timer (3-2-1) before auto-capturing when stability is detected, reducing the need to tap the button
+
+---
+
+## Let's Talk
+
+I enjoyed working through this challenge — it covers a lot of ground I care about: thoughtful UX, clean architecture, and backend reliability done right. The "If I Had More Time" section above is not filler; those are the exact next conversations I'd want to have with the team.
+
+If this looks like the kind of work you're looking for, I'd love to connect.
+
+📧 **[iahsan.ellahi@gmail.com](mailto:iahsan.ellahi@gmail.com)**
