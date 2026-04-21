@@ -50,6 +50,7 @@ Full-stack messaging feature built from scratch:
 - [Architecture Decisions](#architecture-decisions)
 - [Error Handling](#error-handling)
 - [Code Quality](#code-quality)
+- [Scan Capture — Technical Audit](#scan-capture--technical-audit)
 - [If I Had More Time](#if-i-had-more-time)
 
 ---
@@ -439,6 +440,89 @@ return NextResponse.json({ ok: true }); // returns instantly
 - Message sidebar has `role="dialog"`, `aria-modal="true"`, `aria-label`
 - All icon-only buttons have `aria-label`
 - Input field labelled with `aria-label="Message input"`
+
+---
+
+## Scan Capture — Technical Audit
+
+This section is a candid engineering audit of the current scan capture pipeline — what works, what is limited by the scope of this challenge, and where real-world improvements should be focused.
+
+### Current State
+
+The scan flow captures 5 dental photos using `getUserMedia` and draws each frame to a `<canvas>` element to extract a base64 data URL. These images are held in React component state and **never actually uploaded or persisted** — they are lost on page refresh. This is a known gap within the scope of this challenge.
+
+Stability detection is approximated using `DeviceMotionEvent` magnitude — a proxy for camera shake. It works well for flagging gross movement but cannot assess true image sharpness, focus quality, or lighting.
+
+---
+
+### Audit Findings
+
+#### 🔴 Critical — Image Persistence
+**Current:** Captured frames exist only as base64 strings in component state.  
+**Impact:** No image survives a page refresh. The `Scan.images` DB column is never written to.  
+**Fix:** Add a `POST /api/upload` route that accepts the base64 payload, uploads to S3/R2 with `PutObjectCommand`, and returns a permanent URL. Write URLs to `Scan.images` immediately after each capture.
+
+#### 🔴 Critical — No Image Quality Validation
+**Current:** The app gates capture on motion stability (magnitude threshold), but a blurry, dark, or incorrectly framed image passes through silently.  
+**Impact:** Dentists may receive unusable images, degrading diagnostic quality.  
+**Fix:** Before accepting a capture, run the frame through a **sharpness heuristic** (Laplacian variance on a downscaled greyscale version of the canvas — a standard computer vision technique implementable in ~20 lines of JS) and a **brightness check** (average luminance of pixels). Reject captures that fall below thresholds with specific feedback ("Too dark — move to better lighting" / "Still blurry — hold steadier").
+
+#### 🟡 Medium — Camera Resolution
+**Current:** `getUserMedia({ video: { facingMode: "user" } })` requests no resolution constraints. The browser picks whatever default it likes — often 640×480 on mobile.  
+**Impact:** Low-resolution images are insufficient for dental AI analysis (cavity detection models typically require ≥1MP).  
+**Fix:**
+```ts
+video: {
+  facingMode: "environment", // rear camera — better optics
+  width: { ideal: 1920 },
+  height: { ideal: 1080 },
+}
+```
+Also switch to `facingMode: "environment"` — the rear camera has a better sensor, autofocus, and macro capability than the selfie camera.
+
+#### 🟡 Medium — Image Compression & File Size
+**Current:** `canvas.toDataURL()` defaults to PNG at full resolution — uncompressed, potentially 3–8MB per frame.  
+**Impact:** Uploading 5 uncompressed frames would be 15–40MB per scan session — unacceptable on mobile networks.  
+**Fix:** Use `canvas.toDataURL("image/jpeg", 0.82)` for a 5–10× size reduction with minimal visible quality loss. For production, pipe through a `sharp` server-side resize to a max of 1920px on the longest edge before writing to S3.
+
+#### 🟡 Medium — Motion Threshold Calibration
+**Current:** `MOTION_THRESHOLD_UNSTABLE = 11.5` and `MOTION_THRESHOLD_OKAY = 10.2` are fixed constants.  
+**Impact:** These were calibrated against a specific device. Different phones report accelerometer values differently — a value of 11.5 m/s² may be far too sensitive on one device and too permissive on another.  
+**Fix:** Implement a **calibration phase** when the camera first opens: sample the baseline magnitude over 500ms while the device is resting and compute dynamic thresholds relative to that baseline (`baseline + 0.7` for okay, `baseline + 2.0` for unstable).
+
+#### 🟢 Enhancement — AI-Assisted Framing
+**Current:** The circular guide overlay is a passive visual aid. The patient must judge for themselves whether their mouth is centred.  
+**Enhancement:** Integrate **MediaPipe Face Mesh** (runs entirely in-browser via WASM, zero server calls) to detect the patient's mouth landmarks in real time. Use the landmark positions to:
+- Dynamically resize the guide circle to match the detected mouth aperture
+- Show directional nudge hints ("Move phone left", "Open wider") as overlay text
+- Auto-trigger capture when the mouth is centred and the stability is green — removing the need to tap the button
+
+#### 🟢 Enhancement — AI-Powered Scan Analysis
+**Current:** Captured images go to the results page with no analysis.  
+**Enhancement:** After upload, trigger an async analysis job:
+1. Send image URLs to a **Replicate** model (e.g. a fine-tuned ResNet or ViT for dental pathology) or a custom model served via **TensorFlow.js** in the browser
+2. Stream results back to the results page via Server-Sent Events
+3. Display findings: cavity risk score, plaque index, gum recession indicators, alignment notes
+4. Persist findings to a `ScanAnalysis` DB model linked to the `Scan`
+
+#### 🟢 Enhancement — Duplicate Frame Detection
+**Current:** The patient can capture the same angle twice by accident.  
+**Enhancement:** Before saving a new capture, compute a simple **perceptual hash** (pHash) of the canvas frame and compare it to previously captured frames. If similarity exceeds 90%, prompt the patient to try a different angle.
+
+---
+
+### Summary Table
+
+| Finding | Severity | Effort | Impact |
+|---------|----------|--------|--------|
+| Images not persisted | 🔴 Critical | Medium | Data loss on every scan |
+| No sharpness/brightness validation | 🔴 Critical | Low | Unusable images sent to dentists |
+| Low camera resolution | 🟡 Medium | Low | Insufficient for AI analysis |
+| No image compression | 🟡 Medium | Low | 40MB+ upload per session |
+| Fixed motion thresholds | 🟡 Medium | Medium | Inconsistent across devices |
+| AI-assisted framing | 🟢 Enhancement | High | Removes user error entirely |
+| AI scan analysis | 🟢 Enhancement | High | Core product differentiator |
+| Duplicate frame detection | 🟢 Enhancement | Low | Better data quality |
 
 ---
 

@@ -13,16 +13,19 @@ export default function MessageSidebar({ threadId: initialThreadId, patientId }:
     const [threadId, setThreadId] = useState(initialThreadId);
     const bottomRef = useRef<HTMLDivElement>(null);
 
-    useEffect(() => {
-        if (!isOpen || !threadId) return;
-
-        fetch(`/api/messaging?threadId=${threadId}`)
+    // Shared fetch helper — used on open and after auto-reply
+    const fetchMessages = (tid: string) =>
+        fetch(`/api/messaging?threadId=${tid}`)
             .then((r) => {
                 if (!r.ok) throw new Error(`Failed to load messages (${r.status})`);
                 return r.json();
             })
             .then((data) => setMessages(data.messages ?? []))
             .catch((err) => console.error("MessageSidebar: load error", err));
+
+    useEffect(() => {
+        if (!isOpen || !threadId) return;
+        fetchMessages(threadId);
     }, [isOpen, threadId]);
 
     useEffect(() => {
@@ -61,12 +64,21 @@ export default function MessageSidebar({ threadId: initialThreadId, patientId }:
 
             const data = await res.json();
 
-            if (!threadId && data.threadId) {
-                setThreadId(data.threadId);
+            const resolvedThreadId = data.threadId as string;
+            const isNewThread = !threadId && !!resolvedThreadId;
+
+            if (isNewThread) {
+                setThreadId(resolvedThreadId);
             }
+
             setMessages((prev) =>
                 prev.map((m) => (m.id === tempId ? (data.message as Message) : m))
             );
+
+            // On first message, refetch after 2.5s so the auto-reply appears automatically
+            if (isNewThread) {
+                setTimeout(() => fetchMessages(resolvedThreadId), 2500);
+            }
         } catch (err) {
             setMessages((prev) => prev.filter((m) => m.id !== tempId));
             setInput(text);

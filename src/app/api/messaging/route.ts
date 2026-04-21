@@ -1,6 +1,27 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
+const AUTO_REPLY_TEXT =
+  "Thanks for reaching out! 👋 We've received your message and a member of our team will get back to you shortly. If your question is urgent, please call our clinic directly.";
+
+// Fires after the response is sent — does not block the patient
+async function sendAutoReply(threadId: string) {
+  // Small delay so the auto-reply feels like a real person typing
+  await new Promise((resolve) => setTimeout(resolve, 1500));
+  try {
+    await prisma.message.create({
+      data: {
+        threadId,
+        content: AUTO_REPLY_TEXT,
+        sender: "dentist",
+      },
+    });
+    console.log(`[AutoReply] ✅ Sent for thread: ${threadId}`);
+  } catch (err) {
+    console.error("[AutoReply] ❌ Failed:", err);
+  }
+}
+
 // GET /api/messaging?threadId=xxx
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
@@ -32,8 +53,9 @@ export async function POST(req: Request) {
     }
 
     let resolvedThreadId = threadId;
+    const isNewThread = !resolvedThreadId;
 
-    if (!resolvedThreadId) {
+    if (isNewThread) {
       if (!patientId) {
         return NextResponse.json(
           { error: "patientId required to create a new thread" },
@@ -53,6 +75,11 @@ export async function POST(req: Request) {
         sender,
       },
     });
+
+    // Fire auto-reply only on the very first message of a new thread
+    if (isNewThread) {
+      sendAutoReply(resolvedThreadId); // no await — non-blocking
+    }
 
     return NextResponse.json(
       { ok: true, message, threadId: resolvedThreadId },
